@@ -38,6 +38,48 @@ def batchGenerator(file_list, label_list, batch_size):
         # Yield to the calling function
         yield (batch_array, labels)
 
+def batchGeneratorPredict(file_list, label_list, batch_size, small_set=32):
+    # Load first NRRD
+    file_index = 0
+    slice_num = 0
+    slice_all = 0
+    counter = 0
+    
+    img_array, img_label, file_index = processNextNrrd(file_list, label_list, file_index)
+    
+    img_array = img_array[:,:,:small_set]
+
+    # Loop indefinitely
+    while slice_all < img_array.shape[-1]-1:
+        # Initialize image batch
+        batch_array = []
+        labels = []
+
+        # Populate array until we hit the batch size
+        while len(batch_array) < min(batch_size, small_set):
+            if slice_num < img_array.shape[-1]-1:#img_array.shape[0]-1:
+                batch_array.append(img_array[:,:,slice_num])
+                labels.append(img_label)
+                slice_num += 1
+            else:
+                if len(file_list) > 1:
+                  img_array, img_label, file_index = processNextNrrd(file_list, label_list, file_index)
+                slice_all += slice_num
+                counter += 1
+                slice_num = 0
+
+        # Set correct formats
+        batch_array = np.array(batch_array)
+        
+        print(f'batch_array shape BEFORE: {batch_array.shape} Counter: {counter}')
+        batch_array = np.reshape(batch_array, (batch_array.shape[0], batch_array.shape[1], batch_array.shape[2], 1))
+
+        print(f'batch_array shape AFTER: {batch_array.shape}')
+        labels = tf.keras.utils.to_categorical(labels)
+
+        # Yield to the calling function
+        yield (batch_array, labels)
+
 def processNextNrrd(file_list, label_list, file_index):
     # Load nrrd file
     img = sitk.ReadImage(file_list[file_index])
@@ -84,15 +126,16 @@ def pullRandomNrrds(parent_dir, insp_exp='', std_sharp='', num_files=100):
     return file_list, file_labels
 
 
-def getImageSetSize(file_list):
+def getImageSetSize(file_list, index_first = True):
 	file_size_list = []
 	reader = sitk.ImageFileReader()
+  index = 0 if index_first else -1
 
 	for file in file_list:
 		reader.SetFileName(file)
 		reader.LoadPrivateTagsOn()
 		reader.ReadImageInformation()
-		file_size_list.append(reader.GetSize()[2])
+		file_size_list.append(reader.GetSize()[index]) # (554, 512, 512)
 
 	num_images = sum(file_size_list)
 
